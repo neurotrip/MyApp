@@ -1,0 +1,1 @@
+/usr/bin/cc  -pthread -Wall -Wextra -Wpedantic   CMakeFiles/TestApp.dir/v3_program.c.o  -o TestApp 

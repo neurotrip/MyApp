@@ -1,0 +1,40 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/code/TestApp/build/v3_program.c
+stdio.h
+-
+errno.h
+-
+stdlib.h
+-
+sys/syslog.h
+-
+unistd.h
+-
+sys/stat.h
+-
+sys/types.h
+-
+sys/inotify.h
+-
+sys/wait.h
+-
+fcntl.h
+-
+string.h
+-
+pthread.h
+-
+stdbool.h
+-
+sched.h
+-
+signal.h
+-
+
