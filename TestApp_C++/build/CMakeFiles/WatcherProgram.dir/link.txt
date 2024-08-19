@@ -1,0 +1,1 @@
+/usr/bin/c++     CMakeFiles/WatcherProgram.dir/app.cpp.o CMakeFiles/WatcherProgram.dir/watcher.cpp.o  -o WatcherProgram  -lpthread 

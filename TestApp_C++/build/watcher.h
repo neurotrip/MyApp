@@ -1,6 +1,7 @@
 #ifndef WATHCER_H_
 #define WATHCER_H_
 #include <thread>
+#include <memory>
 #include <atomic>
 #include "sys/inotify.h"
 
@@ -13,11 +14,18 @@ class Watcher {
 		int _inotify_fd;
 		int _in_fd;
 		int _out_fd;
+		int _wd;
+		std::unique_ptr<char[]> _indata;
+		std::unique_ptr<char[]> _outdata;
+		std::unique_ptr<char[]> _dirname;
+
 		std::thread less_thread;
 		std::thread fw_thread;
 		std::atomic<bool> exit_flag{true};	
  	public:
-		Watcher(int inotify_fd = 0, int in_fd = 0, int out_fd = 0);
+		Watcher();
+		Watcher(const char *_in, const char *_out, const char *_dirn);
+		~Watcher();
 		
 		void file_watcher();
 		void less();

@@ -1,0 +1,3 @@
+/home/alex/MyApp/TestApp_C++/build/CMakeFiles/rebuild_cache.dir
+/home/alex/MyApp/TestApp_C++/build/CMakeFiles/edit_cache.dir
+/home/alex/MyApp/TestApp_C++/build/CMakeFiles/WatcherProgram.dir
