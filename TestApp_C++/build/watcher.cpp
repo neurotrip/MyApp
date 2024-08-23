@@ -6,29 +6,36 @@
 #include <syslog.h>
 #include <fcntl.h>
 
-Watcher::Watcher()
+Watcher::Watcher() 
+    : _buffer(std::make_unique<char[]>(MAX)),
+      _event_buf(std::make_unique<char[]>(BUF_LEN)),
+      _inotify_fd(-1),
+      _in_fd(-1),
+      _out_fd(-1),
+      _wd(-1),
+      _indata(nullptr),
+      _outdata(nullptr),
+      _dirname(nullptr)
 {
-	_inotify_fd = 0;
-	_in_fd = 0;
-	_out_fd = 0;
-	_indata = nullptr;
-	_outdata = nullptr;
-	_dirname = nullptr;
-	_wd = 0;	
 }
 
 Watcher::Watcher(const char *in, const char *out, const char *dirn)
+    : _buffer(std::make_unique<char[]>(MAX)),
+      _event_buf(std::make_unique<char[]>(BUF_LEN)),
+      _indata(std::make_unique<char[]>(strlen(in) + 1)),
+      _outdata(std::make_unique<char[]>(strlen(out) + 1)),
+      _dirname(std::make_unique<char[]>(strlen(dirn) + 1)),
+      _inotify_fd(-1),
+      _in_fd(-1),
+      _out_fd(-1),
+      _wd(-1)
 {
-	try {
-		_indata = std::make_unique<char[]>(strlen(in) +1);
-		_outdata = std::make_unique<char[]>(strlen(out) +1);
-		_dirname = std::make_unique<char[]>(strlen(dirn) +1);
+    try {
+        strcpy(_indata.get(), in);
+        strcpy(_outdata.get(), out);
+        strcpy(_dirname.get(), dirn);
 
-		strcpy(_indata.get(), in);
-    	strcpy(_outdata.get(), out);
-    	strcpy(_dirname.get(), dirn);
-
-		 _inotify_fd = inotify_init();
+        _inotify_fd = inotify_init();
         if (_inotify_fd == -1) {
             throw std::runtime_error("Failed to initialize inotify");
         }
@@ -47,47 +54,83 @@ Watcher::Watcher(const char *in, const char *out, const char *dirn)
         if (_out_fd == -1) {
             throw std::runtime_error("Failed to open output file");
         }
-	} catch (const std::runtime_error& e) {
-			syslog(LOG_ERR, "Error initializing Watcher: %s", e.what());
-			throw;
-	}
-
-}	
-
-Watcher::~Watcher()
-{
-    try {
-        if (_wd != 0) {
-            inotify_rm_watch(_inotify_fd, _wd);
-        }
-
-        if (_inotify_fd != 0) {
-            close(_inotify_fd);
-        }
-
-        if (_in_fd != 0) {
-            close(_in_fd);
-        }
-
-        if (_out_fd != 0) {
-            close(_out_fd);
-            remove(_outdata.get());
-        }
-    } catch (const std::exception &e) {
-        syslog(LOG_ERR, "Error during Watcher destruction: %s", e.what());
+    } catch (const std::runtime_error& e) {
+        syslog(LOG_ERR, "Error in Watcher constructor: %s", e.what());
+        cleanup();  
+        throw;  
+    } catch (...) {
+        syslog(LOG_ERR, "Unknown error in Watcher constructor");
+        cleanup();  
+        throw;  
     }
-};
-void Watcher::file_watcher() 
+}
+
+Watcher::~Watcher() noexcept {
+    cleanup();
+}
+
+void Watcher::cleanup() noexcept {
+     try {
+        if (_wd != -1) {
+            if (inotify_rm_watch(_inotify_fd, _wd) == -1) {
+                syslog(LOG_ERR, "Failed to remove inotify watch: %s", strerror(errno));
+            }
+        }
+    } catch (const std::exception& e) {
+        syslog(LOG_ERR, "Exception during inotify_rm_watch: %s", e.what());
+    } catch (...) {
+        syslog(LOG_ERR, "Unknown exception during inotify_rm_watch");
+    }
+
+    try {
+        if (_inotify_fd != -1) {
+            if (close(_inotify_fd) == -1) {
+                syslog(LOG_ERR, "Failed to close inotify_fd: %s", strerror(errno));
+            }
+        }
+    } catch (const std::exception& e) {
+        syslog(LOG_ERR, "Exception during close(_inotify_fd): %s", e.what());
+    } catch (...) {
+        syslog(LOG_ERR, "Unknown exception during close(_inotify_fd)");
+    }
+
+    try {
+        if (_in_fd != -1) {
+            if (close(_in_fd) == -1) {
+                syslog(LOG_ERR, "Failed to close in_fd: %s", strerror(errno));
+            }
+        }
+    } catch (const std::exception& e) {
+        syslog(LOG_ERR, "Exception during close(_in_fd): %s", e.what());
+    } catch (...) {
+        syslog(LOG_ERR, "Unknown exception during close(_in_fd)");
+    }
+
+    try {
+        if (_out_fd != -1) {
+            if (close(_out_fd) == -1) {
+                syslog(LOG_ERR, "Failed to close out_fd: %s", strerror(errno));
+            }
+            if (remove(_outdata.get()) == -1) {
+                syslog(LOG_ERR, "Failed to remove outdata file: %s", strerror(errno));
+            }
+        }
+    } catch (const std::exception& e) {
+        syslog(LOG_ERR, "Exception during close(_out_fd) or remove(_outdata): %s", e.what());
+    } catch (...) {
+        syslog(LOG_ERR, "Unknown exception during close(_out_fd) or remove(_outdata)");
+    }
+}
+
+void Watcher::file_watcher()
 {
-    auto buffer = std::make_unique<char[]>(MAX);
     ssize_t bytes_read;
     struct inotify_event *event;
 
     while (exit_flag != false)
-	{
-  	try {
-            char event_buf[BUF_LEN];
-            int num_bytes = read(_inotify_fd, event_buf, BUF_LEN);
+    {
+        try {
+            int num_bytes = read(_inotify_fd, _event_buf.get(), BUF_LEN);
             if (num_bytes == -1) {
                 throw std::runtime_error("Failed to read inotify_fd");
             }
@@ -95,15 +138,15 @@ void Watcher::file_watcher()
             int i = 0;
             while (i < num_bytes)
             {
-                event = (struct inotify_event *)&event_buf[i];
+                event = (struct inotify_event *)&_event_buf[i];
                 if ((event->mask & IN_MODIFY) && (strcmp(event->name, "indata.txt") == 0))
                 {
-                    bytes_read = read(_in_fd, buffer.get(), MAX);
+                    bytes_read = read(_in_fd, _buffer.get(), MAX);
                     if (bytes_read == -1) {
                         throw std::runtime_error("Failed to read indata.txt");
                     }
 
-                    if (write(_out_fd, buffer.get(), bytes_read) == -1) {
+                    if (write(_out_fd, _buffer.get(), bytes_read) == -1) {
                         throw std::runtime_error("Failed to write to outdata.txt");
                     }
                 }
@@ -111,11 +154,12 @@ void Watcher::file_watcher()
             }
         } catch (const std::runtime_error &e) {
             syslog(LOG_ERR, "%s", e.what());
-            break;  // Выйти из цикла в случае ошибки
+            break;
         }
-	}
-	std::cout<<"File Watcher done!\n";
+    }
+    std::cout << "File Watcher done!\n";
 }
+
 void Watcher::less() 
 {
 	system("/usr/bin/less +F /home/alex/MyApp/TestApp_C++/tmp/outdata.txt");

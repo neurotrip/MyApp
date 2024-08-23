@@ -7,7 +7,8 @@
 
 int main(int argc, char *argv[])
 {
-	if (argc < 4) {
+	if (argc != 4) {
+		printf("Usage: %s <input_file> <output_file> <directory>\n", argv[0]);
         syslog(LOG_ERR, "Usage: %s <input_file> <output_file> <directory>", argv[0]);
         return EXIT_FAILURE;
     }
