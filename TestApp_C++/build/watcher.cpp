@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <syslog.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <cerrno>
 
 Watcher::Watcher() 
     : _buffer(std::make_unique<char[]>(MAX)),
@@ -126,20 +128,35 @@ void Watcher::file_watcher()
 {
     ssize_t bytes_read;
     struct inotify_event *event;
+	struct pollfd fds;
+    fds.fd = _inotify_fd; 
+    fds.events = POLLIN;  
 
+    int poll_timeout = 10000;
     while (exit_flag != false)
     {
         try {
+			int poll_result = poll(&fds, 1, poll_timeout);
+
+            if (poll_result == -1) {
+                throw std::runtime_error("Failed to poll inotify_fd");
+            } else if (poll_result == 0) {
+                std::cout << "No events, exiting watcher loop.\n";
+                break;
+            }
             int num_bytes = read(_inotify_fd, _event_buf.get(), BUF_LEN);
-            if (num_bytes == -1) {
+			 if (num_bytes == -1 && errno == EAGAIN) {
+                continue;
+            } else if (num_bytes == -1) {
                 throw std::runtime_error("Failed to read inotify_fd");
             }
-
+			if (exit_flag == false)
+			   break;	
             int i = 0;
             while (i < num_bytes)
             {
                 event = (struct inotify_event *)&_event_buf[i];
-                if ((event->mask & IN_MODIFY) && (strcmp(event->name, "indata.txt") == 0))
+				if ((event->mask & IN_MODIFY) && (strcmp(event->name, "indata.txt") == 0))
                 {
                     bytes_read = read(_in_fd, _buffer.get(), MAX);
                     if (bytes_read == -1) {
@@ -149,9 +166,9 @@ void Watcher::file_watcher()
                     if (write(_out_fd, _buffer.get(), bytes_read) == -1) {
                         throw std::runtime_error("Failed to write to outdata.txt");
                     }
-                }
-                i += EVENT_SIZE + event->len;
-            }
+                } 
+                i += EVENT_SIZE + event->len; 
+			}
         } catch (const std::runtime_error &e) {
             syslog(LOG_ERR, "%s", e.what());
             break;

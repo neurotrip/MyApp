@@ -23,7 +23,7 @@ class Watcher {
 
 		std::thread less_thread;
 		std::thread fw_thread;
-		std::atomic<bool> exit_flag{true};	
+		std::atomic<bool> exit_flag;	
 		void cleanup() noexcept;
  	public:
 		Watcher();
